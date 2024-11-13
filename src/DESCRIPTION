@@ -1,0 +1,22 @@
+Package: tgxddi
+Title: TGx-DDI
+Version: 0.0.0.9000
+Description: The TGx-DDI biomarker was developed as a toxicogenomics signature to identify chemicals that can cause DNA damage in human cells in culture.
+License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
+    license
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports:
+    affy,
+    AnnotationDbi,
+    BH,
+    Cairo,
+    dendextend,
+    heatmap3,
+    Heatplus,
+    hgu133plus2cdf,
+    openxlsx,
+    plogr,
+    RSQLite
