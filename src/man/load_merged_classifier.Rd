@@ -7,6 +7,6 @@
 load_merged_classifier(classifier_version)
 }
 \description{
-Load the specified trained classifier joined to the trained heatmap data by
-gene symbol.
+Load the specified trained classifier joined to the training chemicals
+joined by gene symbol.
 }

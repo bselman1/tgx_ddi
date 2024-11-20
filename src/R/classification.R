@@ -24,7 +24,7 @@ load_classifier = function(classifier_version) {
   )
   
   log_msg(glue::glue("Loading classifier: {classifier_filepath}"))
-  read.table(
+  result = read.table(
     file = classifier_filepath, 
     header = TRUE, 
     sep = "\t", 
@@ -32,25 +32,33 @@ load_classifier = function(classifier_version) {
     fill = TRUE, 
     comment.char = ""
   )
+
+  # Keep only the necessary columns
+  result = result[c("ID", "Genotoxic.score", "Non.Genotoxic.score", "my.train.sd")]
+
+  # Rename the ID column to Probe
+  colnames(result)[colnames(result) == 'ID'] = 'Probe'
+
+  return(result)
 }
 
 
-#' @title Load the trained heatmap data into a dataframe.
+#' @title Load the log10 fold-change data for the training chemicals.
 #' @inheritParams check_classifier_version
 #' @export
-load_heatmap = function(classifier_version) {
+load_training_fc = function(classifier_version) {
   check_classifier_version(classifier_version)
   
-  heatmap_filepath = get_pkg_filepath(
+  fc_filepath = get_pkg_filepath(
     "classifier", 
     paste0("v", classifier_version), 
     "general", 
     "Heatmap_Data.txt"
   )
   
-  log_msg(glue::glue("Loading heatmap data: {heatmap_filepath}"))
+  log_msg(glue::glue("Loading training fold-change data: {fc_filepath}"))
   read.table(
-    file = heatmap_filepath, 
+    file = fc_filepath, 
     header = TRUE,
     check.names = FALSE,
     sep = "\t", 
@@ -63,19 +71,17 @@ load_heatmap = function(classifier_version) {
 
 #' @title Load merged training data.
 #' @description
-#' Load the specified trained classifier joined to the trained heatmap data by
-#' gene symbol.
+#' Load the specified trained classifier joined to the training chemicals
+#' joined by gene symbol.
 load_merged_classifier = function(classifier_version) {
   # Load the classifier keeping only necessary columns
   classifier = load_classifier(classifier_version)
-  classifier = classifier[c("ID", "Genotoxic.score", "Non.Genotoxic.score", "my.train.sd")]
-  colnames(classifier)[colnames(classifier) == 'ID'] = 'Probe'
   
   # Load the heatmap data
-  heatmap = load_heatmap(classifier_version)
+  training_fc = load_training_fc(classifier_version)
   
   # Merge the data frames
-  merge(classifier, heatmap, by.x = "Probe", by.y = "Probe")
+  merge(classifier, training_fc, by.x = "Probe", by.y = "Probe")
 }
 
 
@@ -238,97 +244,60 @@ create_fc_matrix = function(valid_df) {
   return(result)
 }
 
-
-#' @title Classify a test material as genotoxic, non-genotoxic, or unclassified.
+#' @title Classify a set of test materials as genotoxic, non-genotoxic, or unclassified.
 #' @description
-#' Classify a test material as being genotoxic, non-genotoxic, or unclassified 
-#' by comparing against a known training set of genotoxic and non-genotoxic
-#' chemicals.
+#' Classify a set of test materials as being genotoxic, non-genotoxic, or unclassified. 
+#' Optionally include the training chemical set in the classification.
 #' @param input_data A two column data frame that has gene symbols in column 1
 #' and log10 fold-change data in column 2. Column 1 should be named "Probe" and
 #' the name of column 2 will be taken as the test material identifier for labeling
 #' purposes.
-#' @param out_dir The output directory to place the resulting figures and tables.
-#' Defaults to the current working directory
-#' @param outfile_prefix A prefix to use in the file names of any saved output from
-#' this function. Defaults to the test material name found in the input_data argument.
+#' @param include_training If TRUE, include the training chemicals in the classification.
 #' @inheritParams check_classifier_version
+#' @returns A list with the following members:
+#'   * fc_matrix - A matrix of just the log10 fold change data for each chemical. Rows are genes and columns are chemicals.
+#'   * classification_df - A data frame with the classification results for each test material.
+#'       Columns are:
+#'         * chem_id - The name of the test material
+#'         * prob_genotoxic - The probability of the test material being genotoxic
+#'         * prob_non_genotoxic - The probability of the test material being non-genotoxic
+#'         * classification - The classification of the test material (Genotoxic, Non-Genotoxic, or Unclassified)
+#'   * gene_dist - The gene distance matrix
+#'   * gene_clust_dendo - The dendogram of the gene distance matrix
 #' @export
-classify_general = function(input_data, classifier_version, out_dir = NULL, outfile_prefix = NULL, plot_title, save_outputs = TRUE) {
-  # Default to the current working directory if out_dir is not provided
-  if (is.null(out_dir)) {
-    out_dir = getwd()
+classify = function(input_data, classifier_version, include_training = FALSE) {
+  # Load the classifier and optionally the training chemicals heatmap data
+  if (include_training) {
+    dat = load_merged_classifier(classifier_version)
+  } else {
+    dat = load_classifier(classifier_version)
   }
-  
-  # Make the output directory if it doesn't exist
-  if (!dir.exists(out_dir)) {
-    dir.create(out_dir)
-  }
-  
-  # Load the merged classifier/heatmap dataframe
-  dat = load_merged_classifier(classifier_version)
-  
-  # Add the log10 probe data from the input chemical
+
+  # Add the log10 probe data from the input chemicals
   dat = merge(dat, input_data, by.x = "Probe", by.y = "Probe")
   
   # Verify the data frame is in the correct format
-  log_msg("Validating input data...")
   valid_df = validate_merged_input_df(dat)
-  
-  # Keep track of our test material which is the last column in the validated data frame
-  chem_name = tail(colnames(valid_df$df), 1)
   
   # Create a matrix of just the log10 fold change data
   fc_matrix = create_fc_matrix(valid_df)
   
   # Obtain classification predictions
-  log_msg(glue::glue("Classifying input data for {chem_name}..."))
   classification_df = predict_classification(valid_df)
-  
-  # Row clustering
+
+  # Dendogram generation
   log_msg("Calculating gene distance and performing dendogram clustering...")
   gene_dist = dist(fc_matrix)
   gene_clust_dendo = hclust(gene_dist, method = "average")
   gene_clust_dendo = as.dendrogram(gene_clust_dendo)
   
-  if (save_outputs) {
-    if (is.null(outfile_prefix)) {
-      # Use the test material name as the default prefix
-      outfile_prefix = chem_name
-    }
-    # Make sure the prefix doesn't contain any invalid file name characters
-    outfile_prefix = fs::path_sanitize(outfile_prefix)
-    
-    # Create the outputs
-    timestamp <- format(Sys.time(), "%d-%b-%Y")
-    save_foldchange_file(out_dir, outfile_prefix, fc_matrix)
-    save_gene_distance_file(out_dir, outfile_prefix, gene_dist)
-    save_heatmap_with_cluster_pdf(
-      fc_matrix = fc_matrix,
-      classification_df = classification_df,
-      gene_clust_dendo = gene_clust_dendo, 
-      plot_title = plot_title, 
-      timestamp = timestamp,
-      out_dir = out_dir, 
-      outfile_prefix = outfile_prefix
-    )
-    save_heatmap_png(
-      fc_matrix = fc_matrix,
-      classification_df = classification_df,
-      gene_clust_dendo = gene_clust_dendo, 
-      plot_title = plot_title, 
-      timestamp = timestamp,
-      out_dir = out_dir, 
-      outfile_prefix = outfile_prefix
-    )
-  }
-  
-  # Return the classification result for the test material which is the last column
-  # in the classification data frame
-  class_result = tail(classification_df, 1)
-  return(as.list(class_result))
+  list(
+    fc_matrix = fc_matrix,
+    classification_df = classification_df,
+    gene_dist = gene_dist,
+    gene_clust_dendo = gene_clust_dendo
+  )
 }
-
 
 save_foldchange_file <- function(out_dir, outfile_prefix, fc_data) {
   filename = glue::glue('{outfile_prefix}_fold_change_data.txt')

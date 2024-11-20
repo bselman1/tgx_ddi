@@ -20,8 +20,11 @@ blue_yellow_col_vec = function (nrgcols = 12) {
   colvec
 }
 
-
-plot_heatmap = function(fc_matrix, classification_df, gene_clust_dendo, plot_title, timestamp) {
+#' @title Build heatmap comparing a single test material against the training materials.
+#' @description 
+#' This function builds a heatmap comparing a single test material against the training materials.
+#' The test material should be the last column of the fc_matrix.
+plot_heatmap_against_training = function(fc_matrix, classification_df, gene_clust_dendo, plot_title, timestamp) {
   
   # Insert a blank column between the training materials and the test material which is in the last column
   train_chunk = fc_matrix[, seq(1, ncol(fc_matrix) - 1)]
@@ -76,6 +79,33 @@ plot_heatmap = function(fc_matrix, classification_df, gene_clust_dendo, plot_tit
   segments(0.727, 0.84, 0.727, 0.86, col= 'black', lwd=1)
   #horizental
   segments(0.23, 0.85, 0.726, 0.85, col= 'black', lwd=1)
+}
+
+
+plot_heatmap = function(fc_matrix, classification_df, gene_clust_dendo, plot_title, timestamp) {
+
+  # Build a df that we will use to display colored labels on top of the heatmap
+  class_colors = data.frame(
+    classification = c("Genotoxic", "Non-Genotoxic", "Unclassified"),
+    color = c("red", "blue", "grey")
+  )
+  classification_df = merge(classification_df, class_colors, by = "classification")
+  
+  plot_legend = function() {
+    heatmap3::showLegend(legend = class_colors$classification, col = class_colors$color)
+  }
+  
+  heatmap(
+    x = fc_matrix[, classification_df[["chem_id"]]],
+    Rowv = gene_clust_dendo,
+    Colv = NA,
+    scale = "row",
+    margins = c(10, 5),
+    cexRow=0.65,
+    cexCol=0.65,
+    col = blue_yellow_col_vec(ncol(fc_matrix)),
+    ColSideColors = classification_df[["color"]]
+  )
 }
 
 
@@ -142,7 +172,7 @@ plot_cluster <- function(fc_matrix, plot_title, timestamp) {
 }
 
 
-save_heatmap_with_cluster_pdf = function(fc_matrix, classification_df, gene_clust_dendo, plot_title, timestamp, out_dir, outfile_prefix) {
+save_heatmap_pdf = function(fc_matrix, classification_df, gene_clust_dendo, plot_title, timestamp, out_dir, outfile_prefix) {
   filename = glue::glue('{outfile_prefix}_heatmap.pdf')
   filepath = file.path(out_dir, filename)
 
@@ -160,6 +190,23 @@ save_heatmap_with_cluster_pdf = function(fc_matrix, classification_df, gene_clus
     plot_title = plot_title, 
     timestamp = timestamp
   )
+  
+  dev.off()
+  invisible()
+}
+
+
+save_cluster_pdf = function(fc_matrix, plot_title, timestamp, out_dir, outfile_prefix) {
+  filename = glue::glue('{outfile_prefix}_cluster.pdf')
+  filepath = file.path(out_dir, filename)
+
+  Cairo::CairoPDF(
+    file = filepath, 
+    width = 11, 
+    height = 8.5,
+    pointsize = 12, 
+    family = "Courier"
+  )
   plot_cluster(
     fc_matrix = fc_matrix,
     plot_title = plot_title, 
@@ -171,7 +218,7 @@ save_heatmap_with_cluster_pdf = function(fc_matrix, classification_df, gene_clus
 }
 
 
-save_heatmap_png <- function(fc_matrix, classification_df, gene_clust_dendo, plot_title, timestamp, out_dir, outfile_prefix) {
+save_heatmap_png = function(fc_matrix, classification_df, gene_clust_dendo, plot_title, timestamp, out_dir, outfile_prefix) {
   filename = glue::glue('{outfile_prefix}_heatmap.png')
   filepath = file.path(out_dir, filename)
   
@@ -184,6 +231,60 @@ save_heatmap_png <- function(fc_matrix, classification_df, gene_clust_dendo, plo
     type="cairo"
   )
   plot_heatmap(
+    fc_matrix = fc_matrix,
+    classification_df = classification_df,
+    gene_clust_dendo = gene_clust_dendo, 
+    plot_title = plot_title, 
+    timestamp = timestamp
+  )
+  dev.off()
+  
+  invisible()
+}
+
+
+save_heatmap_with_cluster_training_pdf = function(fc_matrix, classification_df, gene_clust_dendo, plot_title, timestamp, out_dir, outfile_prefix) {
+  filename = glue::glue('{outfile_prefix}_heatmap.pdf')
+  filepath = file.path(out_dir, filename)
+
+  Cairo::CairoPDF(
+    file = filepath, 
+    width = 11, 
+    height = 8.5,
+    pointsize = 12, 
+    family = "Courier"
+  )
+  plot_heatmap_against_training(
+    fc_matrix = fc_matrix,
+    classification_df = classification_df,
+    gene_clust_dendo = gene_clust_dendo, 
+    plot_title = plot_title, 
+    timestamp = timestamp
+  )
+  plot_cluster(
+    fc_matrix = fc_matrix,
+    plot_title = plot_title, 
+    timestamp = timestamp
+  )
+  
+  dev.off()
+  invisible()
+}
+
+
+save_heatmap_training_png <- function(fc_matrix, classification_df, gene_clust_dendo, plot_title, timestamp, out_dir, outfile_prefix) {
+  filename = glue::glue('{outfile_prefix}_heatmap.png')
+  filepath = file.path(out_dir, filename)
+  
+  res2X = 144
+  png(
+    filename=filepath, 
+    width=11 * res2X, 
+    height=8.5 * res2X, 
+    res=res2X, 
+    type="cairo"
+  )
+  plot_heatmap_against_training(
     fc_matrix = fc_matrix,
     classification_df = classification_df,
     gene_clust_dendo = gene_clust_dendo, 

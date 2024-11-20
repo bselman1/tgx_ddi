@@ -4,15 +4,10 @@
 \alias{read_batch_file}
 \title{Read a batch TSV file.}
 \usage{
-read_batch_file(batch_filepath, data_start_column = 2)
+read_batch_file(batch_filepath)
 }
 \arguments{
 \item{batch_filepath}{Path to the tab separated input file.}
-
-\item{data_start_column}{Index of the column where the log2 fold change data
-starts. Defaults to 2.
-The incoming dataframe may have metadata columns between the gene symbol column
-and the fold change columns. Build a sequence of columns of just the FC columns.}
 }
 \description{
 Read a batch file into a dataframe.

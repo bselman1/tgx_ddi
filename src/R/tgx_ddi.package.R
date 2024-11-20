@@ -15,4 +15,17 @@ get_pkg_filepath = function(...){
   system.file(..., package = "tgxddi", mustWork = TRUE)
 }
 
+#' @title Check if an object is an error
+#' @description Check to see if the provided object is an S3 class that inherits from "try-error"
+#' @param x An object to check
+is.error = function(x) inherits(x, "try-error")
+
+get_error_msg = function(e) {
+  condition = attr(e, "condition")
+  if (is.null(condition)) {
+    return("")
+  }
+  return(conditionMessage(condition))
+}
+
 NULL

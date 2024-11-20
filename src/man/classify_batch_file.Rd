@@ -2,30 +2,35 @@
 % Please edit documentation in R/batch.R
 \name{classify_batch_file}
 \alias{classify_batch_file}
-\title{Classify a batch of chemical results from a file.}
+\title{Classify a batch of test chemical results from a file.}
 \usage{
 classify_batch_file(
   batch_filepath,
-  out_dir = NULL,
   data_start_column = 2,
   classifier_version = 2,
-  plot_title = NULL
+  save_outputs = TRUE,
+  plot_title = NULL,
+  out_dir = NULL,
+  outfile_prefix = NULL
 )
 }
 \arguments{
-\item{out_dir}{The output directory to place the resulting figures and tables.
-Defaults to the current working directory}
-
-\item{data_start_column}{Index of the column where the log2 fold change data
-starts. Defaults to 2.
-The incoming dataframe may have metadata columns between the gene symbol column
-and the fold change columns. Build a sequence of columns of just the FC columns.}
+\item{batch_filepath}{Path to a file containing a batch of input data to classify as tab delimited
+text.}
 
 \item{classifier_version}{Version of the trained DDI classifier to use. Possible values are 1 or 2.}
 
-\item{input_file}{Path to a file containing a batch of input data to classify as tab delimited
-text.}
+\item{save_outputs}{If TRUE, save the resulting figures and tables to the output directory.}
+
+\item{plot_title}{The title to use in the classification figures. Defaults to NULL.}
+
+\item{out_dir}{The output directory to place the resulting figures and tables.
+Defaults to the current working directory}
+
+\item{outfile_prefix}{A prefix to use in the file names of any saved output from
+this function. Defaults to "tgx_ddi_results".}
 }
 \description{
-Classify a batch of chemical results from a file.
+Classif the provided test materials from a batch file but do not
+compare against the training data.
 }
