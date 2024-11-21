@@ -4,6 +4,16 @@ The TGx-DDI biomarker was developed as a toxicogenomics signature to identify ch
 ## Overview
 This repo is a containerized version of the TGx-DDI Biomarker for DNA Damage Classification tool (https://cebs.niehs.nih.gov/tgxddi/) with some modifications to better allow running multiple chemicals through the classifier.
 
+### Installation as a Package (Non-Docker use case):
+Because this package has dependencies on Bioconductor packages, you'll need to install it using Biocmanager. Here is an example syntax that will use bioconductor to pull this package from GitHub and install the necessary CRAN and Bioconductor packages:
+```r
+BiocManager::install("bselman1/tgx_ddi", subdir = "src")
+```
+Note that we also have a dependency on the Cairo package which may require some system level dependencies be present. On linux, these can be installed via:
+```bash
+sudo apt-get install libcairo2-dev libxt-dev
+```
+
 ### Interactive Use
 This use case fits best if you want to make changes to the data and or code in real time and have those changes be reflected in the docker container. This setup will mount a working directory on the host computer into the container so any changes on either side (host or in RStudio) will change the file on the host computer.
 
