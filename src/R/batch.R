@@ -23,6 +23,15 @@ validate_chemical_id = function(chemical_id) {
   ))
 }
 
+set_valid_chemical_id_attribute = function(x, valid_chem_id) {
+  attr(x, "valid_chem_id") = valid_chem_id
+  return(x)
+}
+
+get_valid_chemical_id_attribute = function(x) {
+  return(attr(x, "valid_chem_id"))
+}
+
 
 #' @title Validate a batch dataframe is in the expected format.
 #' @description 
@@ -61,9 +70,6 @@ validate_batch_df = function(batch_df, data_start_column = 2) {
   result = result[, c(1, data_col_indices)]
   log_msg(glue::glue("Found {n_data_cols} chemical instances starting at column: {data_start_column}"))
   
-  # We'll keep track of the unique list of chemical names in a list associated to a number of concentrations tested
-  chem_conc_map = list()
-  
   # Transform the log2 fold change data to log10 and validate column headers
   for (i in 2:ncol(result)) {
     colname = colnames(result)[i]
@@ -74,15 +80,42 @@ validate_batch_df = function(batch_df, data_start_column = 2) {
       error_msg = get_error_msg(valid_chem_id)
       stop(glue::glue("Invalid column header {colname}. Details: {error_msg}."))
     }
-
+    
+    col_values = result[[i]]
+    
     # Make sure the column contains numeric values
-    if (!is.numeric(result[,i])) {  
+    if (!is.numeric(col_values)) {  
       stop(glue::glue("Column {colname} has non-numeric data."))
     }
 
     # Convert from log2 to log10
-    result[,i] = log10(2 ^ result[,i])
-    
+    col_values = log10(2 ^ col_values)
+
+    # Add an attribute to the column with the validated chemical id for easier sorting later
+    col_values = set_valid_chemical_id_attribute(col_values, valid_chem_id)
+    result[[i]] = col_values
+  }
+
+  return(result)
+}
+
+
+#' @title Sort a batch dataframe by chemical name then concentration.
+#' @param valid_batch_df Validated batch dataframe as produced by [validate_batch_df].
+sort_batch_df = function(valid_batch_df) {
+  # We'll keep track of the unique list of chemical names in a list associated to a number of concentrations tested
+  chem_conc_map = list()
+
+  # Capture the unique list of chemical names and their tested concentrations
+  for (i in 2:ncol(valid_batch_df)) {
+    colname = colnames(valid_batch_df)[i]
+    col_values = valid_batch_df[[i]]
+    valid_chem_id = get_valid_chemical_id_attribute(col_values)
+
+    if (is.null(valid_chem_id)) {
+      stop(glue::glue("Column {colname} does not have a valid chemical id attribute."))
+    }
+
     # Check if this is a new chemical name or an additional concentration to a previous chemical
     if (valid_chem_id$name %in% names(chem_conc_map)) {
       # Add the concentration to the list of concentrations for this chemical
@@ -90,14 +123,12 @@ validate_batch_df = function(batch_df, data_start_column = 2) {
       entry$concentrations = c(entry$concentrations, valid_chem_id$concentration)
       entry$units = c(entry$units, valid_chem_id$units)
       chem_conc_map[[valid_chem_id$name]] = entry
-      log_msg(glue::glue("Found additional concentration {valid_chem_id$concentration} {valid_chem_id$units} for chemical {valid_chem_id$name}"))
     } else {
       # Add a new entry for this chemical
       chem_conc_map[[valid_chem_id$name]] = list(
         concentrations = valid_chem_id$concentration,
         units = valid_chem_id$units
       )
-      log_msg(glue::glue("Found new chemical {valid_chem_id$name} with concentration {valid_chem_id$concentration}"))
     }
   }
 
@@ -119,10 +150,9 @@ validate_batch_df = function(batch_df, data_start_column = 2) {
     }
   }
 
-  # Resort the result data frame to match the sorted chemical names
-  result = result[, c("Probe", sorted_names)]
-
-  return(result)
+    # Resort the result data frame to match the sorted chemical names
+    result = valid_batch_df[, c("Probe", sorted_names)]
+    return(result)
 }
 
 
@@ -155,6 +185,7 @@ split_validated_batch_df = function(valid_batch_df) {
   return(results)
 }
 
+
 #' @title Read a batch TSV file.
 #' @description Read a batch file into a dataframe.
 #' @param batch_filepath Path to the tab separated input file.
@@ -178,6 +209,15 @@ read_batch_file = function(batch_filepath) {
 #' @param batch_filepath 
 #' Path to a file containing a batch of input data to classify as tab delimited
 #' text.
+#' @param meta_info_df A dataframe containing metadata information about the test
+#' materials in the batch file. Defaults to NULL. If provided, the data frame should
+#  have the following columns:
+#' * chem_id (Required): The chemical identifier in the format ChemicalName_Concentration_Units.
+#' * actual_class (Optional): The actual genotoxicity class of the test material. One of
+#'   "Genotoxic", "Non-Genotoxic", or "Unclassified". If provided, a bar will be added to
+#'   the heatmap indicating the actual class vs the predicted class.
+#' * sort_order (Optional): A numeric value to use to sort the test materials. If not provided,
+#'   the test materials will be sorted by chemical name then concentration.
 #' @param save_outputs If TRUE, save the resulting figures and tables to the output directory.
 #' @param plot_title The title to use in the classification figures. Defaults to NULL.
 #' @param out_dir The output directory to place the resulting figures and tables.
@@ -190,6 +230,7 @@ classify_batch_file = function(
   batch_filepath,
   data_start_column = 2,
   classifier_version = 2,
+  meta_info_df = NULL,
   save_outputs = TRUE,
   plot_title = NULL,
   out_dir = NULL,
@@ -198,6 +239,48 @@ classify_batch_file = function(
   # Read and validate the batch file
   batch_df = read_batch_file(batch_filepath)
   valid_batch_df = validate_batch_df(batch_df, data_start_column)
+
+  # If the meta_info_df is provided, validate that the chem_id column is present and matches the column names in the batch data
+  if (!is.null(meta_info_df)) {
+    if (!"chem_id" %in% colnames(meta_info_df)) {
+      stop("meta_info_df must contain a column named 'chem_id'.")
+    }
+    if (!all(meta_info_df$chem_id %in% colnames(valid_batch_df))) {
+      stop("All values in chem_id must match column names in the batch data.")
+    }
+  } else {
+    log_msg("No meta data provided, using defaults.")
+    meta_info_df = data.frame(chem_id = tail(colnames(valid_batch_df), -1))
+  }
+
+  # Validate actual classes if provided
+  has_actual_classes = "actual_class" %in% colnames(meta_info_df)
+  if (has_actual_classes) {
+    valid_classes = meta_info_df$actual_class %in% c("Genotoxic", "Non-Genotoxic", "Unclassified")
+    if (!all(valid_classes)) {
+      stop("All values in actual_class must be one of 'Genotoxic', 'Non-Genotoxic', or 'Unclassified'.")
+    }
+    log_msg("Using actual classes provided from meta data.")
+  }
+
+  # Sort the batch data
+  sort_order_override = "sort_order" %in% colnames(meta_info_df)
+  if (sort_order_override) {
+    # Check the names in the sort order override are valid
+    log_msg("Using custom sorting from provided meta data.")
+    ordered_ids = meta_info_df[order(meta_info_df$sort_order), "chem_id"]
+    valid_batch_df = valid_batch_df[, c("Probe", ordered_ids)]
+  } else {
+    log_msg("Using default sorting: by chemical name then concentration.")
+    valid_batch_df = sort_batch_df(valid_batch_df)
+    # Add the default sort order to the meta data
+    ordered_ids = tail(colnames(valid_batch_df), -1)
+    default_sort_order = data.frame(
+      chem_id = ordered_ids,
+      sort_order = seq_along(ordered_ids)
+    )
+    meta_info_df = merge(meta_info_df, default_sort_order, by = "chem_id", sort = FALSE)
+  }
 
   # Classify the batch data
   result = classify(
@@ -221,6 +304,9 @@ classify_batch_file = function(
     }
     # Make sure the prefix doesn't contain any invalid file name characters
     outfile_prefix = fs::path_sanitize(outfile_prefix)
+
+    # Add the meta data to the classification data frame
+    result$classification_df = merge(result$classification_df, meta_info_df, by = "chem_id")
 
     # Create the outputs
     timestamp <- format(Sys.time(), "%d-%b-%Y")

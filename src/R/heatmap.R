@@ -20,6 +20,17 @@ blue_yellow_col_vec = function (nrgcols = 12) {
   colvec
 }
 
+#' @title Get a matrix that maps DDI classifications to colors for plotting purposes.
+#' @description Builds a 2 column matrix in the following format:
+#' 1. classification: The classification of the material (Genotoxic, Non-Genotoxic, Unclassified)
+#' 2. color: The color to use for the classification
+default_class_colors = function() {
+  as.matrix(data.frame(
+    classification = c("Genotoxic", "Non-Genotoxic", "Unclassified"),
+    color = c("red", "blue", "grey")
+  ))
+}
+
 #' @title Build heatmap comparing a single test material against the training materials.
 #' @description 
 #' This function builds a heatmap comparing a single test material against the training materials.
@@ -82,29 +93,52 @@ plot_heatmap_against_training = function(fc_matrix, classification_df, gene_clus
 }
 
 
-plot_heatmap = function(fc_matrix, classification_df, gene_clust_dendo, plot_title, timestamp) {
+plot_heatmap = function(fc_matrix, classification_df, class_colors = NULL, gene_clust_dendo, plot_title, timestamp) {
+  # If class_colors is not provided, use the default colors
+  if (is.null(class_colors)) {
+    class_colors = default_class_colors()
+  }
 
-  # Build a df that we will use to display colored labels on top of the heatmap
-  class_colors = data.frame(
-    classification = c("Genotoxic", "Non-Genotoxic", "Unclassified"),
-    color = c("red", "blue", "grey")
-  )
+  # Add a column mapping the predicted classification to a color
   classification_df = merge(classification_df, class_colors, by = "classification")
-  
-  plot_legend = function() {
-    heatmap3::showLegend(legend = class_colors$classification, col = class_colors$color)
+
+  # Sort the classification data frame if there is a sort order column
+  if ("sort_order" %in% colnames(classification_df)) {
+    classification_df = classification_df[order(classification_df[["sort_order"]]),]
   }
   
-  heatmap(
+  # Check to see if the classification data frame has a column for the actual/known classification
+  has_actual_classification = "actual_class" %in% colnames(classification_df)
+  if (has_actual_classification) {
+    # Add a column mapping the actual classification to a color
+    classification_df = merge(
+      classification_df, 
+      class_colors,
+      by.x = "actual_class",
+      by.y = "classification",
+      suffixes = c(".predicted", ".actual"),
+      sort = FALSE
+    )
+    color_matrix = as.matrix(classification_df[c("color.predicted", "color.actual")])
+    colnames(color_matrix) = c("Predicted", "Actual")
+  } else {
+    color_matrix = as.matrix(classification_df[c("color")])
+    colnames(color_matrix) = c("Predicted")
+  }
+
+  
+  
+  heatmap3_custom(
     x = fc_matrix[, classification_df[["chem_id"]]],
     Rowv = gene_clust_dendo,
     Colv = NA,
     scale = "row",
-    margins = c(10, 5),
+    margins = c(11, 5),
     cexRow=0.65,
     cexCol=0.65,
     col = blue_yellow_col_vec(ncol(fc_matrix)),
-    ColSideColors = classification_df[["color"]]
+    ColSideColors = color_matrix,
+    ColSideLabs = colnames(color_matrix)
   )
 }
 
