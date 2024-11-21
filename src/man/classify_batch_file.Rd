@@ -8,6 +8,7 @@ classify_batch_file(
   batch_filepath,
   data_start_column = 2,
   classifier_version = 2,
+  meta_info_df = NULL,
   save_outputs = TRUE,
   plot_title = NULL,
   out_dir = NULL,
@@ -19,6 +20,17 @@ classify_batch_file(
 text.}
 
 \item{classifier_version}{Version of the trained DDI classifier to use. Possible values are 1 or 2.}
+
+\item{meta_info_df}{A dataframe containing metadata information about the test
+materials in the batch file. Defaults to NULL. If provided, the data frame should
+\itemize{
+\item chem_id (Required): The chemical identifier in the format ChemicalName_Concentration_Units.
+\item actual_class (Optional): The actual genotoxicity class of the test material. One of
+"Genotoxic", "Non-Genotoxic", or "Unclassified". If provided, a bar will be added to
+the heatmap indicating the actual class vs the predicted class.
+\item sort_order (Optional): A numeric value to use to sort the test materials. If not provided,
+the test materials will be sorted by chemical name then concentration.
+}}
 
 \item{save_outputs}{If TRUE, save the resulting figures and tables to the output directory.}
 
